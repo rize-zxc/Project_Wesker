@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>Управление постами</title>
+  <meta charset="UTF-8"/>
+  <link rel="stylesheet" href="/webjars/bootstrap/5.3.3/css/bootstrap.min.css"/>
+  <style>
+    body {
+      margin: 20px;
+    }
+    .post {
+      border: 1px solid #ccc;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 5px;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1 class="mb-4">Управление постами</h1>
+
+
+  <div class="mb-4">
+    <form th:action="@{/postsbyuser}" method="get" class="row g-3">
+      <div class="col-auto">
+        <label for="username" class="form-label">Выберите пользователя:</label>
+      </div>
+      <div class="col-auto">
+        <select id="username" name="username" class="form-select" required>
+          <option value="">-- Выберите пользователя --</option>
+          <option th:each="user : ${users}"
+                  th:value="${user.username}"
+                  th:text="${user.username}"></option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary">Показать посты</button>
+      </div>
+    </form>
+  </div>
+
+
+  <div th:if="${message}" class="alert" th:class="${success} ? 'alert-success' : 'alert-danger'" role="alert">
+    <p th:text="${message}"></p>
+  </div>
+
+
+  <div th:if="${selectedUsername}" class="card mb-4">
+    <div class="card-header">Создать новый пост</div>
+    <div class="card-body">
+      <form th:action="@{/postsbyuser/create}" method="post">
+        <input type="hidden" name="username" th:value="${selectedUsername}"/>
+        <div class="mb-3">
+          <label for="title" class="form-label">Заголовок</label>
+          <input type="text" id="title" name="title" class="form-control" required/>
+        </div>
+        <div class="mb-3">
+          <label for="text" class="form-label">Текст</label>
+          <textarea id="text" name="text" class="form-control" rows="4" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-success">Создать пост</button>
+      </form>
+    </div>
+  </div>
+
+
+  <div th:if="${posts != null}">
+    <div th:if="${not #lists.isEmpty(posts)}">
+      <h2 class="mb-3">Посты пользователя <span th:text="${selectedUsername}"></span></h2>
+      <div th:each="post : ${posts}" class="post">
+        <h3 th:text="${post.title}"></h3>
+        <p th:text="${post.text}"></p>
+        <p><small>ID поста: <span th:text="${post.id}"></span></small></p>
+        <button type="button" class="btn btn-primary btn-sm me-2" data-bs-toggle="modal"
+                th:attr="data-bs-target='#editModal' + ${post.id}">
+          Редактировать
+        </button>
+        <form th:action="@{/postsbyuser/delete}" method="post" class="d-inline">
+          <input type="hidden" name="postId" th:value="${post.id}"/>
+          <input type="hidden" name="username" th:value="${selectedUsername}"/>
+          <button type="submit" class="btn btn-danger btn-sm"
+                  onclick="return confirm('Вы уверены, что хотите удалить этот пост?')">Удалить</button>
+        </form>
+
+
+        <div class="modal fade" th:id="'editModal' + ${post.id}" tabindex="-1" aria-labelledby="editModalLabel"
+             aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="editModalLabel">Редактировать пост</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <form th:action="@{/postsbyuser/update}" method="post">
+                  <input type="hidden" name="postId" th:value="${post.id}"/>
+                  <input type="hidden" name="username" th:value="${selectedUsername}"/>
+                  <div class="mb-3">
+                    <label for="editTitle" class="form-label">Заголовок</label>
+                    <input type="text" id="editTitle" name="title" class="form-control"
+                           th:value="${post.title}" required/>
+                  </div>
+                  <div class="mb-3">
+                    <label for="editText" class="form-label">Текст</label>
+                    <textarea id="editText" name="text" class="form-control" rows="4"
+                              required th:text="${post.text}"></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div th:if="${#lists.isEmpty(posts)}">
+      <p class="text-muted">У пользователя <span th:text="${selectedUsername}"></span> нет постов.</p>
+    </div>
+  </div>
+</div>
+
+<script src="/webjars/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
