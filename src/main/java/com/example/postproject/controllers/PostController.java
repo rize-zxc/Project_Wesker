@@ -164,7 +164,7 @@ public class PostController {
                     content = @Content(schema = @Schema(implementation = Post.class))),
       @ApiResponse(responseCode = "503", description = "Сервис временно недоступен")
     })
-    @GetMapping("/by-user/{username}")
+    @GetMapping("/byuser/{username}")
     public ResponseEntity<?> getPostsByUser(
             @Parameter(description = "Имя пользователя", required = true)
             @PathVariable String username) {
@@ -174,4 +174,6 @@ public class PostController {
         List<Post> posts = postService.getPostsByUsername(username);
         return ResponseEntity.ok(posts);
     }
+
+
 }
