@@ -2,169 +2,137 @@ package com.example.postproject.controllers;
 
 import com.example.postproject.models.Post;
 import com.example.postproject.models.User;
-import com.example.postproject.services.PostService;
-import com.example.postproject.services.StatusService;
-import com.example.postproject.services.UserService;
+import java.util.Arrays;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
-
+/**MVC-controller.*/
 @Controller
+@RequestMapping("/postsbyuser")
 public class PostWebController {
     private static final Logger logger = LoggerFactory.getLogger(PostWebController.class);
-    private final PostService postService;
-    private final UserService userService;
-    private final StatusService statusService;
+    private final RestTemplate restTemplate;
 
-    public PostWebController(PostService postService, UserService userService, StatusService statusService) {
-        this.postService = postService;
-        this.userService = userService;
-        this.statusService = statusService;
+
+    public PostWebController(RestTemplateBuilder builder) {
+        this.restTemplate = builder.build();
     }
 
-    @GetMapping("/postsbyuser")
-    public String getPostsByUser(@RequestParam(name = "username", required = false) String username, Model model) {
-        logger.info("Processing request for posts by user: {}", username);
-        if (!statusService.isServerAvailable()) {
-            logger.warn("Сервис временно недоступен. Пожалуйста, попробуйте позже.");
-            model.addAttribute("message", "Сервис временно недоступен. Пожалуйста, попробуйте позже.");
-            model.addAttribute("success", false);
-            return "postsbyuser";
-        }
+    private final String BASE_URL = "http://localhost:8080";
 
-        List<User> users = userService.getAllUsers();
-        model.addAttribute("users", users);
-        logger.debug("Loaded {} users for dropdown", users.size());
+    /**GET.*/
+    @GetMapping
+    public String getPostsByUser(@RequestParam(required = false) String username, Model model) {
+        try {
+            ResponseEntity<User[]> userResponse = restTemplate.getForEntity(BASE_URL + "/users", User[].class);
+            List<User> users = Arrays.asList(userResponse.getBody());
+            model.addAttribute("users", users);
 
-        if (username != null && !username.isEmpty()) {
-            try {
-                logger.info("Fetching posts for username: {}", username);
-                List<?> posts = postService.getPostsByUsername(username);
+            if (username != null && !username.isEmpty()) {
+                ResponseEntity<Post[]> postResponse = restTemplate.getForEntity(BASE_URL + "/posts/byuser/" + username, Post[].class);
+                List<Post> posts = Arrays.asList(postResponse.getBody());
                 model.addAttribute("posts", posts);
                 model.addAttribute("selectedUsername", username);
-                logger.info("Successfully fetched {} posts for user: {}", posts.size(), username);
-            } catch (Exception e) {
-                logger.error("Error fetching posts for username {}: {}", username, e.getMessage(), e);
-                model.addAttribute("message", "Ошибка при загрузке постов: " + e.getMessage());
-                model.addAttribute("success", false);
             }
-        } else {
-            logger.debug("No username provided, showing user selection form");
-        }
 
+        } catch (Exception e) {
+            logger.error("Ошибка при загрузке данных: {}", e.getMessage(), e);
+            model.addAttribute("message", "Ошибка при загрузке данных: " + e.getMessage());
+            model.addAttribute("success", false);
+        }
         return "postsbyuser";
     }
 
-    @PostMapping("/postsbyuser/create")
-    public String createPost(
-            @RequestParam String username,
-            @RequestParam String title,
-            @RequestParam String text,
-            Model model) {
-        logger.info("Creating post for user: {}", username);
-        if (!statusService.isServerAvailable()) {
-            logger.warn("Server is unavailable");
-            model.addAttribute("message", "Сервис временно недоступен. Пожалуйста, попробуйте позже.");
-            model.addAttribute("success", false);
-            return reloadPosts(username, model);
-        }
-
+    /**POST.*/
+    @PostMapping("/create")
+    public String createPost(@RequestParam String username,
+                             @RequestParam String title,
+                             @RequestParam String text,
+                             Model model) {
         try {
-            User user = userService.getUserByUsername(username)
-                    .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден: " + username));
+            // Получаем ID пользователя по username
+            ResponseEntity<User[]> response = restTemplate.getForEntity(BASE_URL + "/users", User[].class);
+            Long userId = Arrays.stream(response.getBody())
+                    .filter(u -> u.getUsername().equals(username))
+                    .map(User::getId)
+                    .findFirst()
+                    .orElseThrow(() -> new RuntimeException("Пользователь не найден: " + username));
+
             Post post = new Post();
-            post.setTitle(title.trim());
-            post.setText(text.trim());
-            postService.createPost(post, user);
+            post.setTitle(title);
+            post.setText(text);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Post> entity = new HttpEntity<>(post, headers);
+
+            restTemplate.postForEntity(BASE_URL + "/posts/create?userId=" + userId, entity, Post.class);
             model.addAttribute("message", "Пост успешно создан");
             model.addAttribute("success", true);
         } catch (Exception e) {
-            logger.error("Error creating post for user {}: {}", username, e.getMessage(), e);
+            logger.error("Ошибка при создании поста: {}", e.getMessage(), e);
             model.addAttribute("message", "Ошибка при создании поста: " + e.getMessage());
             model.addAttribute("success", false);
         }
-
-        return reloadPosts(username, model);
+        return getPostsByUser(username, model);
     }
 
-    @PostMapping("/postsbyuser/update")
-    public String updatePost(
-            @RequestParam String username,
-            @RequestParam Long postId,
-            @RequestParam String title,
-            @RequestParam String text,
-            Model model) {
-        logger.info("Updating post ID {} for user: {}", postId, username);
-        if (!statusService.isServerAvailable()) {
-            logger.warn("Server is unavailable");
-            model.addAttribute("message", "Сервис временно недоступен. Пожалуйста, попробуйте позже.");
-            model.addAttribute("success", false);
-            return reloadPosts(username, model);
-        }
-
+    /**POST-update.*/
+    @PostMapping("/update")
+    public String updatePost(@RequestParam String username,
+                             @RequestParam Long postId,
+                             @RequestParam String title,
+                             @RequestParam String text,
+                             Model model) {
         try {
-            Post postDetails = new Post();
-            postDetails.setTitle(title.trim());
-            postDetails.setText(text.trim());
-            postService.updatePost(postId, postDetails);
-            model.addAttribute("message", "Пост успешно обновлен");
+
+            Post post = new Post();
+            post.setTitle(title);
+            post.setText(text);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Post> entity = new HttpEntity<>(post, headers);
+
+            restTemplate.exchange(BASE_URL + "/posts/" + postId, HttpMethod.PUT, entity, Void.class);
+            model.addAttribute("message", "Пост успешно обновлён");
             model.addAttribute("success", true);
         } catch (Exception e) {
-            logger.error("Error updating post ID {} for user {}: {}", postId, username, e.getMessage(), e);
+            logger.error("Ошибка при обновлении поста: {}", e.getMessage(), e);
             model.addAttribute("message", "Ошибка при обновлении поста: " + e.getMessage());
             model.addAttribute("success", false);
         }
-
-        return reloadPosts(username, model);
+        return getPostsByUser(username, model);
     }
 
-    @PostMapping("/postsbyuser/delete")
-    public String deletePost(
-            @RequestParam String username,
-            @RequestParam Long postId,
-            Model model) {
-        logger.info("Deleting post ID {} for user: {}", postId, username);
-        if (!statusService.isServerAvailable()) {
-            logger.warn("Server is unavailable");
-            model.addAttribute("message", "Сервис временно недоступен. Пожалуйста, попробуйте позже.");
-            model.addAttribute("success", false);
-            return reloadPosts(username, model);
-        }
-
+    /**POST-delete.*/
+    @PostMapping("/delete")
+    public String deletePost(@RequestParam String username,
+                             @RequestParam Long postId,
+                             Model model) {
         try {
-            postService.deletePost(postId);
-            model.addAttribute("message", "Пост успешно удален");
+            restTemplate.delete(BASE_URL + "/posts/" + postId);
+            model.addAttribute("message", "Пост успешно удалён");
             model.addAttribute("success", true);
         } catch (Exception e) {
-            logger.error("Error deleting post ID {} for user {}: {}", postId, username, e.getMessage(), e);
+            logger.error("Ошибка при удалении поста: {}", e.getMessage(), e);
             model.addAttribute("message", "Ошибка при удалении поста: " + e.getMessage());
             model.addAttribute("success", false);
         }
-
-        return reloadPosts(username, model);
-    }
-
-    private String reloadPosts(String username, Model model) {
-        List<User> users = userService.getAllUsers();
-        model.addAttribute("users", users);
-        if (username != null && !username.isEmpty()) {
-            try {
-                List<?> posts = postService.getPostsByUsername(username);
-                model.addAttribute("posts", posts);
-                model.addAttribute("selectedUsername", username);
-            } catch (Exception e) {
-                logger.error("Error reloading posts for user {}: {}", username, e.getMessage(), e);
-                model.addAttribute("message", "Ошибка при загрузке постов: " + e.getMessage());
-                model.addAttribute("success", false);
-            }
-        }
-        return "postsbyuser";
+        return getPostsByUser(username, model);
     }
 }
-
