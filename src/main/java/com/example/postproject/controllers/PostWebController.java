@@ -64,7 +64,7 @@ public class PostWebController {
                              @RequestParam String text,
                              Model model) {
         try {
-            // Получаем ID пользователя по username
+            
             ResponseEntity<User[]> response = restTemplate.getForEntity(BASE_URL + "/users", User[].class);
             Long userId = Arrays.stream(response.getBody())
                     .filter(u -> u.getUsername().equals(username))
