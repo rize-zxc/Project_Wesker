@@ -104,6 +104,22 @@ public class UserController {
         return ResponseEntity.ok(userService.updateUser(id, userDetails));
     }
 
+    /***get user.*/
+    @Operation(summary = "Получить пользователя по username",
+            description = "Возвращает данные пользователя по указанному username")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Пользователь найден",
+                    content = @Content(schema = @Schema(implementation = User.class))),
+            @ApiResponse(responseCode = "404", description = "Пользователь не найден"),
+            @ApiResponse(responseCode = "503", description = "Сервис временно недоступен")
+    })
+    @GetMapping("/username/{username}")
+    public ResponseEntity<?> getUserByUsername(@PathVariable String username) {
+        Optional<User> user = userService.getUserByUsername(username);
+        return user.map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     /**delete post.*/
     @Operation(summary = "Удалить пользователя", description = "Удаляет пользователя по указанному ID")
     @ApiResponses(value = {
